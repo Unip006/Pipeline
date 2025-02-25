@@ -20,6 +20,7 @@ steps:
   inputs:
     packageType: 'sdk'
     version: '6.x'
+#Restore dependencies
 - script: dotnet restore
   displayName: 'Restore .NET dependencies'
 #Compile
@@ -43,7 +44,7 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: 'publish'
-    projects: '**/*.csproj'
+    projects: 'HelloWorld.csproj'
     arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
   displayName: 'Publish .NET Application'
 
