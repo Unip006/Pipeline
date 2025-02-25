@@ -13,8 +13,49 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- script: dotnet build --configuration Release 
+  displayName: 'Build .NET Project'
+- checkout: self  
+
+#fetch
+- task: UseDotNet@2
+  inputs:
+    packageType: 'sdk'
+    version: '6.x'
+- script: dotnet restore
+  displayName: 'Restore .NET dependencies'
+#Compile
+- script: dotnet build --configuration Release 
+  displayName: 'Build .NET Project'
+
+#Test
+- script: dotnet test --configuration Release --logger trx
+  displayName: 'Run Unit Tests'
+
+- task: PublishTestResults@2
+  inputs:
+    testResultsFiles: '**/*.trx'
+    testRunTitle: 'Unit Tests'
+
+#Static Code Analysis (need to add StyleCop package by terminal)
+- script: dotnet build /warnaserror
+  displayName: 'Run Static Code Analysis'
+
+#Packaging
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'publish'
+    projects: '**/*.csproj'
+    arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+  displayName: 'Publish .NET Application'
+
+#Add Artifact
+- task: PublishBuildArtifacts@1
+  inputs:
+    pathToPublish: '$(Build.ArtifactStagingDirectory)'
+    artifactName: 'drop'
+  displayName: 'Publish Build Artifacts'
+
 
 - script: |
     echo Add other tasks to build, test, and deploy your project.
