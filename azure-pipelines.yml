@@ -13,8 +13,6 @@ pool:
   vmImage: ubuntu-latest
 
 steps:
-- script: dotnet build --configuration Release 
-  displayName: 'Build .NET Project'
 - checkout: self  
 
 #fetch
