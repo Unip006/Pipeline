@@ -44,6 +44,7 @@ steps:
 - task: DotNetCoreCLI@2
   inputs:
     command: 'publish'
+    publishWebProjects: false #This project is console and not Web, need to add this line
     projects: 'HelloWorld.csproj'
     arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
   displayName: 'Publish .NET Application'
