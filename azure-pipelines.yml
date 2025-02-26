@@ -80,7 +80,7 @@ steps:
     command: 'push'
     packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
     nuGetFeedType: 'internal'
-    publishVstsFeed: 'PipelineEx'
+    publishVstsFeed: 'PipelineEx/Feed'
 
 
 
