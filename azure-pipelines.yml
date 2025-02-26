@@ -70,6 +70,12 @@ steps:
   inputs:
     versionSpec: '6.x'  # Adjust the version as needed
 
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'restore'
+    projects: 'HelloWorld.csproj'
+    feedsToUse: 'config'
+    nugetConfigPath: 'nuget.config'
 
 
 - script: |
