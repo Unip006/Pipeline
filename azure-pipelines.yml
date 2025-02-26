@@ -74,7 +74,7 @@ steps:
   inputs:
     command: 'restore'
     projects: 'HelloWorld.csproj'
-    feedsToUse: 'config'
+    feedsToUse: 'select'
     nugetConfigPath: 'nuget.config'
 
 - task: NuGetCommand@2
@@ -83,7 +83,7 @@ steps:
     command: 'push'
     packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
     nuGetFeedType: 'internal'
-    publishVstsFeed: 'feed'  
+    publishVstsFeed: 'PipelineExampleUnip/PipelineEx/_packaging/Feed/nuget/v3/index.json'
 
 
 
