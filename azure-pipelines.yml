@@ -56,6 +56,20 @@ steps:
     artifactName: 'drop'
   displayName: 'Publish Build Artifacts'
 
+#NugGet
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'pack'
+    packagesToPack: 'HelloWorld.csproj'
+    versioningScheme: 'off'
+
+- task: NuGetAuthenticate@1
+  displayName: 'Authenticate NuGet Feed'
+
+- task: NuGetToolInstaller@1
+  inputs:
+    versionSpec: '6.x'  # Adjust the version as needed
+
 
 
 - script: |
