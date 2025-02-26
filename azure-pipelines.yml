@@ -20,6 +20,9 @@ steps:
   inputs:
     packageType: 'sdk'
     version: '6.x'
+#Nuget auth
+- task: NuGetAuthenticate@1
+  displayName: 'Authenticate NuGet Feed'
 #Restore dependencies
 - script: dotnet restore
   displayName: 'Restore .NET dependencies'
@@ -63,18 +66,12 @@ steps:
     packagesToPack: 'HelloWorld.csproj'
     versioningScheme: 'off'
 
-- task: NuGetAuthenticate@1
-  displayName: 'Authenticate NuGet Feed'
-
-- task: NuGetToolInstaller@1
-  inputs:
-    versionSpec: '6.x'  # Adjust the version as needed
 
 - task: DotNetCoreCLI@2
   inputs:
     command: 'restore'
     projects: 'HelloWorld.csproj'
-    feedsToUse: 'select'
+    feedsToUse: 'config'
     nugetConfigPath: 'nuget.config'
 
 - task: NuGetCommand@2
