@@ -64,7 +64,7 @@ steps:
   inputs:
     command: 'pack'
     packagesToPack: 'HelloWorld.csproj'
-    versioningScheme: 'off'
+    versioningScheme: 'byPrereleaseNumber'
 
 
 - task: DotNetCoreCLI@2
