@@ -250,3 +250,65 @@ stages:
             notifyUsers: 'lenio.goncalves@tech.uniparnter.com'
             instructions: 'Please validate the application in UAT and approve before deployment to Production.'
             onTimeout: 'resume'
+
+#Approval Gate
+- stage: UAT_Approval
+  displayName: "UAT Approval Required"
+  dependsOn: Deploy_UAT  #Runs after UAT deployment
+  condition: succeeded()  #Only run if UAT is successful
+  jobs:
+    - job: ApprovalGate
+      displayName: "UAT Approval Step"
+      pool: server  #No VM needed (runs on Azure DevOps)
+      
+      steps:
+        - task: ManualValidation@0
+          displayName: "Approval Before Production Deployment"
+          timeoutInMinutes: 1440  #24 hours for approval
+          inputs:
+            notifyUsers: "lenio.goncalves@tech.unipartner.com"
+            instructions: "Please validate UAT and approve deployment to Production."
+            onTimeout: "reject"
+
+#Deploy to Production
+- stage: Deploy_Production
+  displayName: "Deploy to Production"
+  dependsOn: UAT_Approval  #Ensures UAT approval before production deployment
+  condition: succeeded()  #Only run if UAT was successful and approved
+  jobs:
+    - deployment: ProductionDeploy
+      displayName: "Deploy App to Production"
+      environment: production
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              #Download Build Artifacts
+              - task: DownloadBuildArtifacts@0
+                inputs:
+                  artifactName: "drop"
+                  downloadPath: "$(Pipeline.Workspace)"
+              
+              #Deploy Application to Production VM
+              - task: AzureCLI@2
+                displayName: "Deploy Console App to Production VM"
+                inputs:
+                  azureSubscription: "Unip006"
+                  scriptType: "bash"
+                  scriptLocation: "inlineScript"
+                  inlineScript: |
+                    echo "Starting Production Deployment..."
+                    
+                    #Upload the published HelloWorld app to the Azure VM
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myProductionVM \
+                      --command-id RunShellScript \
+                      --scripts "mkdir -p /home/azureuser/HelloWorld && cp $(Pipeline.Workspace)/drop/HelloWorld /home/azureuser/HelloWorld/"
+
+                    #Run the Console App in Production
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myProductionVM \
+                      --command-id RunShellScript \
+                      --scripts "cd /home/azureuser/HelloWorld && ./HelloWorld"
