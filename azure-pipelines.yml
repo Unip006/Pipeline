@@ -8,83 +8,245 @@ trigger:
     include:
       - main
 
+stages:
+# *********** CI STAGE: BUILD AND PUBLISH ***********
+- stage: Build
+  displayName: "Build and Package Application"
+  jobs:
+  - job: BuildJob
+    displayName: Build and Test Job
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+    #fetch
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '6.x'
+    #Nuget auth
+    - task: NuGetAuthenticate@1
+      displayName: 'Authenticate NuGet Feed'
+      
+    #Restore dependencies
+    - script: dotnet restore
+      displayName: 'Restore .NET dependencies'
 
-pool:
-  vmImage: ubuntu-latest
+    #Compile
+    - script: dotnet build --configuration Release 
+      displayName: 'Build .NET Project'
 
-steps:
-- checkout: self  
+    #Test
+    - script: dotnet test --configuration Release --logger trx
+      displayName: 'Run Unit Tests'
 
-#fetch
-- task: UseDotNet@2
-  inputs:
-    packageType: 'sdk'
-    version: '6.x'
-#Nuget auth
-- task: NuGetAuthenticate@1
-  displayName: 'Authenticate NuGet Feed'
-#Restore dependencies
-- script: dotnet restore
-  displayName: 'Restore .NET dependencies'
-#Compile
-- script: dotnet build --configuration Release 
-  displayName: 'Build .NET Project'
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFiles: '**/*.trx'
+        testRunTitle: 'Unit Tests'
 
-#Test
-- script: dotnet test --configuration Release --logger trx
-  displayName: 'Run Unit Tests'
+    #Static Code Analysis (need to add StyleCop package by terminal)
+    - script: dotnet build /warnaserror
+      displayName: 'Run Static Code Analysis'
 
-- task: PublishTestResults@2
-  inputs:
-    testResultsFiles: '**/*.trx'
-    testRunTitle: 'Unit Tests'
+    #Packaging
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'publish'
+        publishWebProjects: false #This project is console and not Web, need to add this line
+        projects: 'HelloWorld.csproj'
+        arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+      displayName: 'Publish .NET Application'
 
-#Static Code Analysis (need to add StyleCop package by terminal)
-- script: dotnet build /warnaserror
-  displayName: 'Run Static Code Analysis'
+    #Add Artifact
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathToPublish: '$(Build.ArtifactStagingDirectory)'
+        artifactName: 'drop'
+      displayName: 'Publish Build Artifacts'
 
-#Packaging
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'publish'
-    publishWebProjects: false #This project is console and not Web, need to add this line
-    projects: 'HelloWorld.csproj'
-    arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
-  displayName: 'Publish .NET Application'
-
-#Add Artifact
-- task: PublishBuildArtifacts@1
-  inputs:
-    pathToPublish: '$(Build.ArtifactStagingDirectory)'
-    artifactName: 'drop'
-  displayName: 'Publish Build Artifacts'
-
-#NugGet
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'pack'
-    packagesToPack: 'HelloWorld.csproj'
-    versioningScheme: 'byPrereleaseNumber'
-
-
-- task: DotNetCoreCLI@2
-  inputs:
-    command: 'restore'
-    projects: 'HelloWorld.csproj'
-    feedsToUse: 'config'
-    nugetConfigPath: 'nuget.config'
-
-- task: NuGetCommand@2
-  displayName: "Publish NuGet Package"
-  inputs:
-    command: 'push'
-    packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-    nuGetFeedType: 'internal'
-    publishVstsFeed: 'PipelineEx/Feed'
+    #NugGet
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'pack'
+        packagesToPack: 'HelloWorld.csproj'
+        versioningScheme: 'byPrereleaseNumber'
 
 
+    - task: DotNetCoreCLI@2
+      inputs:
+        command: 'restore'
+        projects: 'HelloWorld.csproj'
+        feedsToUse: 'config'
+        nugetConfigPath: 'nuget.config'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+    - task: NuGetCommand@2
+      displayName: "Publish NuGet Package"
+      inputs:
+        command: 'push'
+        packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+        nuGetFeedType: 'internal'
+        publishVstsFeed: 'PipelineEx/Feed'
+
+    - script: | 
+        echo Build and test process completed successfully.
+        echo Next steps: Deploy to Staging.
+      displayName: 'Completion Message'
+
+# *********** CD STAGE: DEPLOY TO STAGGING ***********
+- stage: Deploy_Staging
+  displayName: "Deploy to Staging"
+  dependsOn: Build  #Ensures this stage runs after Build
+  condition: succeeded()  #Only run if the Build stage succeeds
+  #Deployment Job
+  jobs:
+    - deployment: StagingDeploy
+      displayName: "Deploy App to Staging"
+      environment: staging
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            #Download Build Artifacts
+              - task: DownloadBuildArtifacts@0
+                inputs:
+                  artifactName: "drop"
+                  downloadPath: "$(Pipeline.Workspace)"
+              # Deploy Console App to Azure VM
+              - task: AzureCLI@2
+                displayName: "Deploy Console App to Azure VM (Staging)"
+                inputs:
+                  azureSubscription: "Unip006"  #Your Azure service connection
+                  scriptType: "bash"
+                  scriptLocation: "inlineScript"
+                  inlineScript: |
+                    # Upload the published HelloWorld app to the Azure VM
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myVMName \
+                      --command-id RunShellScript \
+                      --scripts "mkdir -p /home/azureuser/HelloWorld && cp $(Pipeline.Workspace)/drop/HelloWorld /home/azureuser/HelloWorld/"
+                    
+                    #Run the Console app on the Azure VM
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myVMName \
+                      --command-id RunShellScript \
+                      --scripts "cd /home/azureuser/HelloWorld && ./HelloWorld"
+
+              #Post-Deployment Health check
+              - task: AzureCLI@2
+                displayName: "Run Health Check (Verify App Execution)"
+                inputs:
+                  azureSubscription: "Unip006"
+                  scriptType: "bash"
+                  scriptLocation: "inlineScript"
+                  inlineScript: |
+                    echo "Checking if HelloWorld app exists on VM..."
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myVMName \
+                      --command-id RunShellScript \
+                      --scripts "[ -f /home/azureuser/HelloWorld/HelloWorld ] && echo 'HelloWorld App Found' || echo 'HelloWorld App NOT Found'"
+
+                    echo "Executing HelloWorld app..."
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myVMName \
+                      --command-id RunShellScript \
+                      --scripts "cd /home/azureuser/HelloWorld && ./HelloWorld"
+                    
+                    #Capture and handle execution failure
+                    EXIT_CODE=$?
+                    if [ $EXIT_CODE -ne 0 ]; then
+                      echo "ERROR: HelloWorld app failed to execute properly!"
+                      exit 1
+                    fi
+                    
+
+#Integration Testing
+- stage: Integration_Tests
+  displayName: "Run Integration Tests"
+  dependsOn: Deploy_Staging  #Runs after the staging deployment
+  condition: succeeded()  #Only run if deployment was successful
+
+  jobs:
+    - job: RunIntegrationTests
+      displayName: "Execute Integration Tests"
+      pool:
+        vmImage: ubuntu-latest
+
+      steps:
+        #Ensure .NET SDK is installed
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '6.x'
+
+        #Restore dependencies for the Integration Test project
+        - script: dotnet restore tests/HelloWorld.IntegrationTests/HelloWorld.IntegrationTests.csproj
+          displayName: "Restore Integration Test Dependencies"
+
+        #Run Integration Tests
+        - script: dotnet test tests/HelloWorld.IntegrationTests/HelloWorld.IntegrationTests.csproj --logger trx
+          displayName: "Run Integration Tests"
+
+        #Publish Test Results
+        - task: PublishTestResults@2
+          inputs:
+            testResultsFiles: '**/*.trx'
+            testRunTitle: 'Integration Tests'
+
+#User Acceptance Testing (UAT)
+- stage: UAT
+  displayName: "User Acceptance Testing (UAT)"
+  dependsOn: Integration_Tests  #Runs only if Integration Tests pass
+  condition: succeeded()  #Ensures no errors before UAT
+
+  jobs:
+    - deployment: Deploy_UAT
+      displayName: "Deploy to UAT Environment"
+      environment: uat
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              #Download Artifacts
+              - task: DownloadBuildArtifacts@0
+                inputs:
+                  artifactName: "drop"
+                  downloadPath: "$(Pipeline.Workspace)"
+
+              #Deploy Console App to UAT VM
+              - task: AzureCLI@2
+                displayName: "Deploy Console App to UAT VM"
+                inputs:
+                  azureSubscription: "Unip006"
+                  scriptType: "bash"
+                  scriptLocation: "inlineScript"
+                  inlineScript: |
+                    #Upload the app to the UAT VM
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myUATVM \
+                      --command-id RunShellScript \
+                      --scripts "mkdir -p /home/azureuser/HelloWorld && cp $(Pipeline.Workspace)/drop/HelloWorld /home/azureuser/HelloWorld/"
+
+                    #Run the app on UAT VM
+                    az vm run-command invoke \
+                      --resource-group myResourceGroup \
+                      --name myUATVM \
+                      --command-id RunShellScript \
+                      --scripts "cd /home/azureuser/HelloWorld && ./HelloWorld"
+
+    - job: UAT_Approval
+      displayName: "UAT Approval Required"
+      dependsOn: Deploy_UAT
+      pool: server  #No VM required, as it's a manual approval step
+      steps:
+        - task: ManualValidation@0
+          timeoutInMinutes: 1440  #24 hours for UAT
+          inputs:
+            notifyUsers: 'lenio.goncalves@tech.uniparnter.com'
+            instructions: 'Please validate the application in UAT and approve before deployment to Production.'
+            onTimeout: 'resume'
