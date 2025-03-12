@@ -239,18 +239,6 @@ stages:
                       --command-id RunShellScript \
                       --scripts "cd /home/azureuser/HelloWorld && ./HelloWorld"
 
-    - job: UAT_Approval
-      displayName: "UAT Approval Required"
-      dependsOn: Deploy_UAT
-      pool: server  #No VM required, as it's a manual approval step
-      steps:
-        - task: ManualValidation@0
-          timeoutInMinutes: 1440  #24 hours for UAT
-          inputs:
-            notifyUsers: 'lenio.goncalves@tech.uniparnter.com'
-            instructions: 'Please validate the application in UAT and approve before deployment to Production.'
-            onTimeout: 'resume'
-
 #Approval Gate
 - stage: UAT_Approval
   displayName: "UAT Approval Required"
